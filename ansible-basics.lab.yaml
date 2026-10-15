@@ -1,0 +1,188 @@
+# Ansible: configure a machine with a playbook
+# Ansible runs against this one VM, so a student can practise it with nothing else to set up.
+# It is installed by the setup below, from Ubuntu's archive, the first time the VM starts.
+cpus: 1
+memory: 1024    # MB
+disk: 10        # GB
+
+# Nothing opens in the browser: the lab is the terminal.
+open: []
+
+# Run once, as root. Its output is kept in /var/log/mitsurutech-setup.log on the VM.
+setup: |
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y -qq --no-install-recommends ansible-core python3-yaml
+  home=/home/student
+  [ -d $home ] || home=/root
+  proj=$home/ansible-lab
+  mkdir -p $proj/templates
+  cat > $proj/inventory.ini <<'ANSIBLE_INVENTORY_END'
+  # The machines Ansible manages. Only this one, reached directly and not over ssh.
+  localhost ansible_connection=local
+  ANSIBLE_INVENTORY_END
+  cat > $proj/ansible.cfg <<'ANSIBLE_CONFIG_END'
+  [defaults]
+  inventory = inventory.ini
+  interpreter_python = auto_silent
+  ANSIBLE_CONFIG_END
+  # The same setting for Ansible run from any other folder, so it never warns about the interpreter.
+  cat > $home/.ansible.cfg <<'ANSIBLE_HOMECONFIG_END'
+  [defaults]
+  interpreter_python = auto_silent
+  ANSIBLE_HOMECONFIG_END
+  cat > $proj/templates/welcome.txt.j2 <<'ANSIBLE_WELCOME_END'
+  Welcome to {{ site_name }}
+  This file is managed by Ansible.
+  ANSIBLE_WELCOME_END
+  cat > $proj/site.yml <<'ANSIBLE_SITE_END'
+  ---
+  # Ansible Basics. Run it with:  ansible-playbook site.yml
+  # Add the three jobs from the README below, each as a task of its own.
+  - name: Set this machine up
+    hosts: localhost
+    become: true
+    vars:
+      site_name: Riverside College
+    tasks:
+      - name: Say what is about to be configured
+        ansible.builtin.debug:
+          msg: "Configuring {{ site_name }}"
+
+      # TODO 1: install the package tree.
+
+      # TODO 2: make /etc/ansible-lab/welcome.txt from templates/welcome.txt.j2.
+
+      # TODO 3: write the unit file /etc/systemd/system/lab-greeter.service.
+  ANSIBLE_SITE_END
+  cat > $home/README.md <<'ANSIBLE_README_END'
+  # Lab: configure a machine with an Ansible playbook
+
+  Ansible describes how a machine should be, in a file, and makes it so. Run the same file
+  twice and the second run has nothing left to do: that is called being **idempotent**. In this
+  lab the machine is this VM, and you finish a playbook that does three jobs.
+
+  ## The project, in ~/ansible-lab
+
+      inventory.ini              the machines Ansible manages: this one, over a local connection
+      ansible.cfg                tells Ansible to use that inventory
+      templates/welcome.txt.j2   a template with a variable in it
+      site.yml                   the playbook: your jobs go here
+
+  ## What to do
+
+  1. Go to the project and run the playbook as it is: cd ~/ansible-lab, then
+     ansible-playbook site.yml. It runs and changes nothing. Read site.yml: the one task in
+     it, how a task is written, and the variable site_name.
+  2. Job 1, a package: this machine does not have the program tree. Make the playbook
+     install the package called tree.
+  3. Job 2, a file made from a template: /etc/ansible-lab/welcome.txt must be made from
+     templates/welcome.txt.j2, owned by root, mode 0644. The folder it goes in does not
+     exist yet.
+  4. Job 3, a unit file: /etc/systemd/system/lab-greeter.service, owned by root, mode 0644,
+     written by the playbook. It describes a one-shot service: its Description line names
+     the site (use the variable site_name), its ExecStart runs a program that exists on this
+     machine, and it is wanted by multi-user.target. Only write the file: you do not start
+     or enable the service.
+  5. Run the playbook again. The last line of the output, the recap, must say changed=0:
+     a second run has nothing to do. If it does not, find which task changed and why.
+
+  ## Rules the check holds you to
+
+  - Use Ansible's own modules. A task that only runs shell, command, raw or script is not
+    what this lab is about, and the check refuses a playbook that has one.
+  - Keep everything in site.yml. Do not use include, import or roles.
+  - Do the work by running the playbook, not by hand. The check runs your playbook with a
+    different site_name and looks at what it made.
+
+  ## Tools
+
+  - ansible-playbook site.yml                 run the playbook
+  - ansible-playbook site.yml --check --diff  a dry run: what would change, and how
+  - ansible-doc -l                            every module there is
+  - ansible-doc ansible.builtin.template      the manual page of one module, with examples
+  - ansible localhost -m setup                everything Ansible knows about this machine
+
+  This VM reaches Ubuntu's package archive, PyPI, npm and GitHub, and nothing else, so there
+  is nothing to download from anywhere else.
+  ANSIBLE_README_END
+  chown -R student:student $proj $home/README.md $home/.ansible.cfg 2>/dev/null
+  echo "Read README.md in your home folder first." > /etc/motd
+
+# Marks a handed-in VM, KAN-29: run as root on a copy of the saved disk after a fresh boot, so
+# it sees only what was saved. Its exit status is the result: 0 passes.
+check: |
+  fail() {
+    echo "NOT PASSED: $*"
+    exit 1
+  }
+  proj=/home/student/ansible-lab
+  play=$proj/site.yml
+  WELCOME=/etc/ansible-lab/welcome.txt
+  UNIT=/etc/systemd/system/lab-greeter.service
+  [ -f $play ] || fail "there is no $play"
+  command -v ansible-playbook >/dev/null 2>&1 || fail "Ansible is not installed on this machine"
+  # The playbook is made of Ansible's own modules: nothing that only runs a command.
+  python3 - $play <<'ANSIBLE_PARSE_END' || exit 1
+  import sys, yaml
+  BAD = {'shell', 'command', 'raw', 'script', 'expect', 'action', 'local_action', 'include', 'include_tasks',
+         'import_tasks', 'include_role', 'import_role', 'import_playbook', 'roles'}
+  PKG = {'package', 'apt'}
+  WRITE = {'copy', 'template', 'blockinfile', 'lineinfile'}
+  def die(why):
+      print('NOT PASSED: ' + why)
+      sys.exit(1)
+  try:
+      plays = yaml.safe_load(open(sys.argv[1]))
+  except Exception as why:
+      die('site.yml is not valid YAML: ' + str(why).split('\n')[0])
+  if not isinstance(plays, list) or not all(isinstance(p, dict) for p in plays) or not plays:
+      die('site.yml has no play in it')
+  used = []
+  def walk(tasks):
+      for t in tasks or []:
+          if not isinstance(t, dict):
+              continue
+          used.extend(str(k).split('.')[-1] for k in t)
+          for k in ('block', 'rescue', 'always'):
+              if isinstance(t.get(k), list):
+                  walk(t[k])
+  for p in plays:
+      used.extend(str(k).split('.')[-1] for k in p if k in ('roles', 'import_playbook'))
+      for part in ('pre_tasks', 'tasks', 'post_tasks', 'handlers'):
+          walk(p.get(part))
+  for name in sorted(set(used) & BAD):
+      die('site.yml uses %s: the jobs are to be done with Ansible modules, in site.yml itself' % name)
+  if not PKG & set(used):
+      die('site.yml has no task that installs a package')
+  if 'template' not in used:
+      die('site.yml has no task that makes a file from a template')
+  if sum(1 for k in used if k in WRITE) < 2:
+      die('site.yml does not write both the welcome file and the unit file')
+  ANSIBLE_PARSE_END
+  # What was saved: the package and both files.
+  dpkg -s tree 2>/dev/null | grep -q '^Status: install ok installed' || fail "the package tree is not installed"
+  [ -f $WELCOME ] || fail "there is no $WELCOME"
+  [ -f $UNIT ] || fail "there is no $UNIT"
+  # Run the playbook, twice, with a site_name nobody has seen: what it makes must carry it.
+  export ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_CONFIG=/tmp/ansible-check.cfg
+  printf '[defaults]\ninterpreter_python = auto_silent\n' > $ANSIBLE_CONFIG
+  SITE="Check$(date +%s)"
+  cd $proj || fail "there is no $proj"
+  run() { timeout 300 ansible-playbook -i localhost, -c local $play -e "site_name=$SITE" 2>&1; }
+  out1=$(run) || fail "the playbook failed: $(echo "$out1" | grep -m1 -E '^(fatal|ERROR)|^ERROR|FAILED')"
+  out2=$(run) || fail "the playbook failed on its second run: $(echo "$out2" | grep -m1 -E '^(fatal|ERROR)|FAILED')"
+  echo "$out2" | grep -E '^localhost +: ' | grep -Eq 'changed=0 +unreachable=0 +failed=0' || fail "a second run of site.yml still changed things, so it is not idempotent: $(echo "$out2" | awk '/^TASK \[/ {t=$0} /^changed:/ {printf "%s; ", t}')"
+  # What it made.
+  dpkg -s tree 2>/dev/null | grep -q '^Status: install ok installed' || fail "the package tree is not installed after the playbook ran"
+  [ "$(stat -c '%U %a' $WELCOME)" = "root 644" ] || fail "$WELCOME should be owned by root with mode 0644, not $(stat -c '%U %a' $WELCOME)"
+  grep -qx "Welcome to $SITE" $WELCOME || fail "$WELCOME was not made from the template and site_name: it does not say Welcome to $SITE"
+  [ "$(stat -c '%U %a' $UNIT)" = "root 644" ] || fail "$UNIT should be owned by root with mode 0644, not $(stat -c '%U %a' $UNIT)"
+  for section in Unit Service Install; do
+    grep -qx "\[$section\]" $UNIT || fail "$UNIT has no [$section] section"
+  done
+  grep -E '^Description=' $UNIT | grep -q "$SITE" || fail "the Description in $UNIT does not carry site_name: it was not made from the variable"
+  exe=$(sed -n 's/^ExecStart=[-@:+!]*\([^ ]*\).*/\1/p' $UNIT | head -1)
+  [ -n "$exe" ] && [ -x "$exe" ] || fail "the ExecStart in $UNIT does not run a program that exists on this machine"
+  grep -qx 'WantedBy=multi-user.target' $UNIT || fail "$UNIT is not wanted by multi-user.target"
+  echo "PASSED: the package is installed, the files are made from site_name, and a second run of the playbook changes nothing"
