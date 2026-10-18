@@ -1,5 +1,7 @@
 # Ansible lab for classrooms: configure a machine with a playbook
 
+[English](README.md) | [Français](README.fr.md) | [日本語](README.ja.md) | [Español](README.es.md)
+
 [![check](https://github.com/mitsurutech/lab-ansible-basics/actions/workflows/check.yml/badge.svg)](https://github.com/mitsurutech/lab-ansible-basics/actions/workflows/check.yml)
 
 A ready-made **Ansible lab** for teaching infrastructure as code, from the [MitsuruTech Learning Platform](https://mitsurutech.co.uk/learning), where schools and colleges give every student their own machines and terminal in the browser. Each student gets an Ubuntu VM with **Ansible** installed and a project with an unfinished **playbook**. They finish it to **install a package**, **make a file from a Jinja2 template with a variable** and **write a systemd unit file**, then run it a second time and see `changed=0`: that is **idempotence**, the idea that makes Ansible worth learning. Nothing is installed on the student's computer.
@@ -59,4 +61,6 @@ More labs from the same place: [lab-netlab](https://github.com/mitsurutech/lab-n
 
 ## Licence
 
-The lab definition and this documentation are MIT licensed, see [LICENSE](LICENSE): copy them, change them, teach with them. [Ansible](https://www.ansible.com) (`ansible-core`, GPL-3.0) is installed from Ubuntu's archive when a VM starts; nothing of it is distributed here.
+This work is licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). You may share it and adapt it for learning and teaching, if you credit Mitsuru Technologies Ltd, do not use it commercially, and share anything you make from it under the same licence. The full text is in the `LICENSE` file.
+
+[Ansible](https://www.ansible.com) (`ansible-core`, GPL-3.0) is installed from Ubuntu's archive when a VM starts; nothing of it is distributed here.
